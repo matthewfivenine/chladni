@@ -420,9 +420,22 @@ function selectPalette(i){
 const LOOP_STEPS=16;
 let placedTones=[],toneIdCounter=0;
 
+// Square pattern bounds — matches drawParticles coordinate mapping
+function getPatternBounds(){
+  const S=Math.min(W,H)*0.5;
+  return{cx:W*0.5, cy:H*0.5, S};
+}
+
 function placeFromEvent(ex,ey){
   ensureAudio();
-  const nx=(ex/W)*2-1, ny=(ey/H)*2-1;
+
+  // Reject clicks outside the square Chladni pattern
+  const{cx,cy,S}=getPatternBounds();
+  if(Math.abs(ex-cx)>S||Math.abs(ey-cy)>S) return;
+
+  // Normalised coords within the pattern square (-1..1)
+  const nx=(ex-cx)/S;
+  const ny=(ey-cy)/S;
   for(const t of placedTones) if((t.nx-nx)**2+(t.ny-ny)**2<0.012) return;
 
   const pal=PALETTE[selectedPalette];
@@ -433,12 +446,16 @@ function placeFromEvent(ex,ey){
     placedTones=placedTones.filter(t=>t!==evicted);
   }
 
-  const yNorm=1-(ey/H);
+  // Pitch: Y within pattern square (top=high, bottom=low)
+  const yNorm=1-(ey-cy+S)/(S*2);
   const scaleLen=scaleFreqs.length;
   const scaleIdx=Math.round(yNorm*(scaleLen-1));
   const freq=scaleFreqs[Math.max(0,Math.min(scaleLen-1,scaleIdx))];
-  // X position maps to loop time — continuous, no snapping
-  const loopOffset=(ex/W)*LOOP_DUR;
+
+  // loopOffset = exact moment within the loop when this note was placed
+  // This is freeform recording — no grid, no quantization
+  const loopOffset=((audioCtx.currentTime - loopStartT) % LOOP_DUR + LOOP_DUR) % LOOP_DUR;
+
   const id=++toneIdCounter;
   const tone={id,nx,ny,px:ex,py:ey,freq,name:freqToName(freq),node:null,
               type:pal.id,palIdx:selectedPalette,glow:0,loopOffset,lastFiredAt:-999};
