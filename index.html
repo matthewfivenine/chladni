@@ -285,7 +285,6 @@ function initPartBuf(){
 }
 
 function drawParticles(){
-  // Rebuild buffer if canvas was resized
   if(partBuf.width!==W||partBuf.height!==H){
     partBuf.width=W; partBuf.height=H;
     pbCtx=partBuf.getContext('2d');
@@ -294,13 +293,15 @@ function drawParticles(){
   const d=pbImg.data;
   d.fill(0);
 
-  const scaleX=W*0.5, scaleY=H*0.5;
+  // Use square scale based on min dimension, centered — keeps pattern square on all screens
+  const S=Math.min(W,H)*0.5;
+  const offX=W*0.5, offY=H*0.5;
 
   for(let i=0;i<NUM_P;i++){
     const a=pa_[i];
     if(a<0.015) continue;
-    const sx=Math.round((px_[i]+1)*scaleX);
-    const sy=Math.round((py_[i]+1)*scaleY);
+    const sx=Math.round(px_[i]*S+offX);
+    const sy=Math.round(py_[i]*S+offY);
     if(sx<0||sx>=W||sy<0||sy>=H) continue;
     const idx=(sy*W+sx)*4;
     const alpha=Math.round(a*210);
@@ -937,10 +938,13 @@ function ensureStarted(){
 
 let pDown=false,lpx=-9999,lpy=-9999;
 function onDown(x,y){
-  ensureStarted();
-  pDown=true;
-  // Small delay so sequencer loopStartT is set before loopOffset is captured
-  setTimeout(()=>{ placeFromEvent(x,y); lpx=x; lpy=y; }, 60);
+  pDown=true; lpx=x; lpy=y;
+  if(!started){
+    ensureStarted();
+    // First press: just start the sequencer, don't place a note
+    return;
+  }
+  placeFromEvent(x,y);
 }
 function onMove(x,y){if(!pDown)return;if(Math.hypot(x-lpx,y-lpy)>28){placeFromEvent(x,y);lpx=x;lpy=y;}}
 canvas.addEventListener('mousedown', e=>onDown(e.clientX,e.clientY));
