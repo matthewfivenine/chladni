@@ -113,7 +113,7 @@ body{animation:fi 2s ease;}@keyframes fi{from{opacity:0}to{opacity:1}}
   </div>
   <div class="palette" id="palette"></div>
   <div class="beat-bar" id="beatBar"></div>
-  <div class="hint" id="hint">Press anywhere to begin</div>
+  <div class="hint" id="hint">Press anywhere to start</div>
 </div>
 
 <script>
@@ -425,7 +425,6 @@ function placeFromEvent(ex,ey){
   for(const t of placedTones) if((t.nx-nx)**2+(t.ny-ny)**2<0.012) return;
 
   const pal=PALETTE[selectedPalette];
-  // Evict oldest tone of same type if at per-type cap
   const sameType=placedTones.filter(t=>t.type===pal.id);
   if(sameType.length>=MAX_PER_TYPE){
     const evicted=sameType[0];
@@ -437,26 +436,21 @@ function placeFromEvent(ex,ey){
   const scaleLen=scaleFreqs.length;
   const scaleIdx=Math.round(yNorm*(scaleLen-1));
   const freq=scaleFreqs[Math.max(0,Math.min(scaleLen-1,scaleIdx))];
-  // Record the exact position within the loop as a continuous time offset
-  const loopOffset=((audioCtx.currentTime - loopStartT) % LOOP_DUR + LOOP_DUR) % LOOP_DUR;
+  // X position maps to loop time — continuous, no snapping
+  const loopOffset=(ex/W)*LOOP_DUR;
   const id=++toneIdCounter;
   const tone={id,nx,ny,px:ex,py:ey,freq,name:freqToName(freq),node:null,
               type:pal.id,palIdx:selectedPalette,glow:0,loopOffset,lastFiredAt:-999};
 
   placedTones.push(tone);
-  document.getElementById('hint').style.opacity='0';
   updateToneList();
-  if(!isPlaying) togglePlay();
-  // Wait for context to be running before firing — fixes silent first note on mobile
+
+  // Preview the note — sequencer already running from ensureStarted()
   const doFire=()=>{
-    const now=audioCtx.currentTime;
-    fireTone(tone, now + 0.02); // tiny offset so note is never in the past
+    fireTone(tone, audioCtx.currentTime + 0.02);
   };
-  if(audioCtx.state==='running'){
-    doFire();
-  } else {
-    audioCtx.resume().then(doFire);
-  }
+  if(audioCtx.state==='running'){ doFire(); }
+  else { audioCtx.resume().then(doFire); }
 }
 
 // Fire tone — dispatches to correct builder by palette type
@@ -836,6 +830,7 @@ function startSequencer(){
   audioCtx.resume().then(()=>{
     loopStartT=audioCtx.currentTime;
     lastWindowEnd=audioCtx.currentTime;
+    // Don't reset lastFiredAt — tones just previewed should skip their first scheduler hit
     schedId=setInterval(scheduler, SCHED_INTERVAL);
   });
 }
@@ -931,8 +926,22 @@ function render(ts){
 // ════════════════════════════════════════
 // INPUT
 // ════════════════════════════════════════
+let started=false;
+function ensureStarted(){
+  if(started) return;
+  started=true;
+  document.getElementById('hint').style.opacity='0';
+  ensureAudio();
+  if(!isPlaying) togglePlay();
+}
+
 let pDown=false,lpx=-9999,lpy=-9999;
-function onDown(x,y){pDown=true;placeFromEvent(x,y);lpx=x;lpy=y;}
+function onDown(x,y){
+  ensureStarted();
+  pDown=true;
+  // Small delay so sequencer loopStartT is set before loopOffset is captured
+  setTimeout(()=>{ placeFromEvent(x,y); lpx=x; lpy=y; }, 60);
+}
 function onMove(x,y){if(!pDown)return;if(Math.hypot(x-lpx,y-lpy)>28){placeFromEvent(x,y);lpx=x;lpy=y;}}
 canvas.addEventListener('mousedown', e=>onDown(e.clientX,e.clientY));
 canvas.addEventListener('mousemove', e=>onMove(e.clientX,e.clientY));
