@@ -504,6 +504,7 @@ function clearTones(){
   for(const t of placedTones) stopToneNode(t, 0.4);
   placedTones=[];
   document.getElementById('hint').style.opacity='1';
+  started=false;
   updateToneList();
 }
 function updateToneList(){
