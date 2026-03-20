@@ -447,11 +447,16 @@ function placeFromEvent(ex,ey){
   document.getElementById('hint').style.opacity='0';
   updateToneList();
   if(!isPlaying) togglePlay();
-  // Fire right now — lastFiredAt set to now so scheduler skips this cycle
-  const now=audioCtx.currentTime;
-  fireTone(tone, now);
-  // lastFiredAt is set inside fireTone to t0=now, so scheduler won't re-fire
-  // until the next loop cycle reaches loopOffset
+  // Wait for context to be running before firing — fixes silent first note on mobile
+  const doFire=()=>{
+    const now=audioCtx.currentTime;
+    fireTone(tone, now + 0.02); // tiny offset so note is never in the past
+  };
+  if(audioCtx.state==='running'){
+    doFire();
+  } else {
+    audioCtx.resume().then(doFire);
+  }
 }
 
 // Fire tone — dispatches to correct builder by palette type
@@ -512,12 +517,15 @@ let audioCtx=null,masterGain=null,convolver=null;
 let analyser=null,freqBins=null,timeBins=null;
 
 function ensureAudio(){
-  if(audioCtx)return;
+  if(audioCtx){
+    // Resume if suspended (mobile browsers suspend on creation)
+    if(audioCtx.state==='suspended') audioCtx.resume();
+    return;
+  }
   audioCtx=new(window.AudioContext||window.webkitAudioContext)();
   masterGain=audioCtx.createGain(); masterGain.gain.value=0.48;
   analyser=audioCtx.createAnalyser(); analyser.fftSize=2048; analyser.smoothingTimeConstant=0.5;
   freqBins=new Uint8Array(analyser.frequencyBinCount); timeBins=new Uint8Array(analyser.fftSize);
-  // Dynamics compressor prevents any single loud node from clipping
   const comp=audioCtx.createDynamicsCompressor();
   comp.threshold.value=-18; comp.knee.value=6;
   comp.ratio.value=10; comp.attack.value=0.001; comp.release.value=0.12;
@@ -825,9 +833,11 @@ function scheduler(){
 
 function startSequencer(){
   ensureAudio();
-  loopStartT=audioCtx.currentTime;
-  lastWindowEnd=audioCtx.currentTime;
-  schedId=setInterval(scheduler, SCHED_INTERVAL);
+  audioCtx.resume().then(()=>{
+    loopStartT=audioCtx.currentTime;
+    lastWindowEnd=audioCtx.currentTime;
+    schedId=setInterval(scheduler, SCHED_INTERVAL);
+  });
 }
 
 function togglePlay(){
