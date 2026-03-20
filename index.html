@@ -1,0 +1,946 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
+<title>Chladni</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;1,300&display=swap');
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:#000000;overflow:hidden;width:100vw;height:100dvh;
+  font-family:'Cormorant Garamond',Georgia,serif;font-weight:300;
+  color:rgba(220,205,175,0.35);touch-action:none;}
+canvas{position:fixed;inset:0;width:100%;height:100%;cursor:crosshair;}
+.ui{position:fixed;inset:0;pointer-events:none;z-index:10;}
+.ui-top{position:absolute;top:0;left:0;right:0;display:flex;
+  justify-content:space-between;align-items:flex-start;padding:20px 24px 0;}
+.title{font-size:clamp(9px,2vw,11px);letter-spacing:6px;text-transform:uppercase;
+  font-style:italic;opacity:0.28;line-height:2.1;}
+.title small{display:block;font-size:7px;letter-spacing:3px;font-style:normal;opacity:0.5;}
+.top-right{display:flex;flex-direction:column;align-items:flex-end;gap:4px;}
+.chord-name{font-size:9px;letter-spacing:5px;text-transform:uppercase;font-style:italic;
+  color:rgba(220,205,175,0);transition:color 0.5s;text-align:right;}
+.chord-name.show{color:rgba(220,205,175,0.45);}
+.tone-list{display:flex;flex-direction:column;align-items:flex-end;gap:3px;
+  max-height:160px;overflow:hidden;pointer-events:all;}
+.tone-tag{font-size:8px;letter-spacing:3px;color:rgba(220,205,175,0.16);cursor:pointer;
+  transition:color 0.1s;-webkit-tap-highlight-color:transparent;
+  text-transform:uppercase;pointer-events:all;line-height:1.9;}
+.tone-tag:hover{color:rgba(220,205,175,0.45);}
+.tone-tag.lit{color:rgba(220,205,175,0.9);}
+.tone-tag.ghost-tag{color:rgba(180,210,200,0.1);font-style:italic;}
+.tone-tag.ghost-tag.lit{color:rgba(180,215,205,0.8);}
+.ui-bottom{position:absolute;bottom:0;left:0;right:0;display:flex;
+  justify-content:space-between;align-items:flex-end;padding:0 24px 20px;pointer-events:none;}
+.controls-left{display:flex;flex-direction:column;gap:9px;pointer-events:all;}
+.controls-right{display:flex;flex-direction:column;align-items:flex-end;gap:8px;pointer-events:all;}
+.ghost-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;max-width:240px;}
+.ghost-label{font-size:7px;letter-spacing:3px;text-transform:uppercase;opacity:0.2;white-space:nowrap;font-style:italic;}
+.select-ghost{font-family:'Cormorant Garamond',Georgia,serif;font-size:9px;letter-spacing:2px;
+  background:transparent;border:none;border-bottom:1px solid rgba(220,205,175,0.1);
+  color:rgba(220,205,175,0.28);cursor:pointer;padding:2px 0;outline:none;
+  -webkit-appearance:none;text-transform:uppercase;font-style:italic;}
+.select-ghost option{background:#0e0c08;color:#d4c8a8;}
+.ghost-btn{font-family:'Cormorant Garamond',Georgia,serif;font-size:9px;letter-spacing:4px;
+  text-transform:uppercase;font-style:italic;padding:5px 13px;
+  border:1px solid rgba(220,205,175,0.12);background:transparent;
+  color:rgba(220,205,175,0.28);cursor:pointer;transition:color 0.2s,border-color 0.2s;
+  -webkit-tap-highlight-color:transparent;}
+.ghost-btn:hover{border-color:rgba(220,205,175,0.35);color:rgba(220,205,175,0.6);}
+.ghost-btn.playing{border-color:rgba(220,205,175,0.4);color:rgba(220,205,175,0.7);}
+.beat-bar{position:absolute;bottom:11px;left:50%;transform:translateX(-50%);
+  display:flex;gap:3px;align-items:center;}
+.beat-dot{width:3px;height:3px;border-radius:50%;background:rgba(220,205,175,0.06);}
+.beat-dot.bar-start{width:4px;height:4px;}
+.beat-dot.lit{background:rgba(220,205,175,0.55);}
+.hint{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+  font-size:clamp(13px,2.5vw,16px);letter-spacing:8px;text-transform:uppercase;
+  color:#ffffff;pointer-events:none;text-align:center;
+  border:1px solid rgba(255,255,255,0.55);padding:24px 44px;
+  white-space:nowrap;transition:opacity 1.5s;}
+body{animation:fi 2s ease;}@keyframes fi{from{opacity:0}to{opacity:1}}
+
+/* ── Sound Palette ── */
+.palette{position:absolute;bottom:32px;left:50%;transform:translateX(-50%);
+  display:flex;gap:12px;align-items:center;pointer-events:all;}
+.pal-btn{width:28px;height:28px;border-radius:50%;border:2px solid transparent;
+  cursor:pointer;transition:transform 0.15s,border-color 0.15s,box-shadow 0.15s;
+  -webkit-tap-highlight-color:transparent;background:transparent;padding:0;
+  position:relative;flex-shrink:0;}
+.pal-orb{width:18px;height:18px;border-radius:50%;
+  position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+  pointer-events:none;}
+.pal-btn:hover{transform:scale(1.18);}
+.pal-btn.selected{border-color:rgba(255,255,255,0.55);transform:scale(1.22);
+  box-shadow:0 0 14px 4px var(--pal-glow);}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div class="ui">
+  <div class="ui-top">
+    <div class="title">Chladni<small>Nodal Synthesis</small></div>
+    <div class="top-right">
+      <div class="chord-name" id="chordName"></div>
+      <div class="tone-list" id="toneList"></div>
+    </div>
+  </div>
+  <div class="ui-bottom">
+    <div class="controls-left">
+      <div class="ghost-row">
+        <span class="ghost-label">Key</span>
+        <select class="select-ghost" id="keySelect" onchange="rebuildScale()">
+          <option>C</option><option>C#</option><option>D</option><option>D#</option>
+          <option>E</option><option>F</option><option>F#</option>
+          <option selected>G</option><option>G#</option><option>A</option>
+          <option>A#</option><option>B</option>
+        </select>
+        <select class="select-ghost" id="scaleSelect" onchange="rebuildScale()">
+          <option value="pent_minor" selected>Pent. Minor</option>
+          <option value="pent_major">Pent. Major</option>
+          <option value="natural_minor">Nat. Minor</option>
+          <option value="major">Major</option>
+          <option value="dorian">Dorian</option>
+        </select>
+      </div>
+    </div>
+    <div class="controls-right">
+      <div class="ghost-row" style="justify-content:flex-end">
+        <button class="ghost-btn" onclick="clearTones()">Clear</button>
+        <button class="ghost-btn" id="playBtn" onclick="togglePlay()">Play</button>
+      </div>
+    </div>
+  </div>
+  <div class="palette" id="palette"></div>
+  <div class="beat-bar" id="beatBar"></div>
+  <div class="hint" id="hint">Press anywhere to begin</div>
+</div>
+
+<script>
+// ════════════════════════════════════════
+// CANVAS — always DPR=1 for performance
+// ════════════════════════════════════════
+const canvas = document.getElementById('c');
+const ctx    = canvas.getContext('2d', {alpha:false});
+let W=0, H=0;
+function resize(){
+  W=canvas.width=window.innerWidth;
+  H=canvas.height=window.innerHeight;
+}
+resize();
+window.addEventListener('resize', resize);
+
+// ════════════════════════════════════════
+// CHLADNI
+// ════════════════════════════════════════
+const BASE_FREQ=110;
+
+// Map frequency to a UNIQUE continuous (m,n) pair using the freq ratio.
+// We use floats so every note produces a genuinely different pattern.
+// Strategy: use the semitone index to walk through a rich sequence of (m,n)
+// values that produce visually distinct Chladni figures.
+const MODE_SEQ=[
+  [1,2],[1,3],[2,3],[1,4],[3,4],[2,5],[1,5],[3,5],[4,5],
+  [1,6],[2,7],[3,7],[4,7],[5,7],[1,7],[2,9],[3,8],[5,8],
+  [4,9],[1,8],[3,10],[5,9],[2,11],[4,11],[6,7],[5,11],[3,11],
+  [7,8],[6,11],[1,9],[5,12],[7,9],[4,13],[6,13],[2,13],[8,9],
+];
+
+function freqToMode(freq){
+  // Map freq to a semitone index relative to base, then pick from rich sequence
+  const semi=Math.round(12*Math.log2(freq/BASE_FREQ));
+  const idx=((semi%MODE_SEQ.length)+MODE_SEQ.length)%MODE_SEQ.length;
+  const [bm,bn]=MODE_SEQ[idx];
+  // Add a small continuous fractional offset based on exact freq ratio
+  // so nearby notes within same bucket still differ slightly
+  const frac=(12*Math.log2(freq/BASE_FREQ))%1;
+  return{m:bm+frac*0.15, n:bn+frac*0.12};
+}
+
+function chladni(x,y,m,n){
+  // Standard square-plate standing wave formula — works with float m,n too
+  return Math.cos(n*Math.PI*x)*Math.cos(m*Math.PI*y)
+        -Math.cos(m*Math.PI*x)*Math.cos(n*Math.PI*y);
+}
+
+// ════════════════════════════════════════
+// AUDIO STATE
+// ════════════════════════════════════════
+const au={rms:0,smoothRms:0,peakRms:0,phase:0,bands:[],ghostBands:[],padGlow:[],kalimbaFlash:[]};
+
+// ════════════════════════════════════════
+// FRAME MODE CACHE
+// ════════════════════════════════════════
+let frameModes=[], frameTotalW=0;
+function buildFrameModes(allTones){
+  // Weight = band energy squared — louder note strongly dominates the blend
+  // This makes frequency shifts produce clear visible pattern changes
+  frameModes=allTones.map((t,i)=>{
+    const bi=i<placedTones.length?au.bands[i]:au.ghostBands[i-placedTones.length];
+    const b=bi??0;
+    return{...freqToMode(t.freq), w:b*b}; // squared for contrast
+  });
+  frameTotalW=frameModes.reduce((s,x)=>s+x.w,0);
+}
+function evalField(xw,yw){
+  if(frameTotalW<0.001)return 0; // silent = no pattern
+  let v=0;
+  for(const{m,n,w}of frameModes)if(w>0.001)v+=chladni(xw,yw,m,n)*(w/frameTotalW);
+  return v;
+}
+
+
+
+// ════════════════════════════════════════
+// PARTICLES — pure sand grains, no glow
+// Tiny 1-1.5px squares, warm beige, opacity only on nodes
+// ════════════════════════════════════════
+const isMob=window.innerWidth<600;
+const NUM_P=isMob?10000:22000;
+
+// Float32 typed arrays for particle state — cache-friendly, fast
+const px_=new Float32Array(NUM_P);
+const py_=new Float32Array(NUM_P);
+const vx_=new Float32Array(NUM_P);
+const vy_=new Float32Array(NUM_P);
+const pa_=new Float32Array(NUM_P);  // alpha
+const cs_=new Int8Array(NUM_P);     // creep sign
+const ms_=new Float32Array(NUM_P);  // mass
+
+function initParticles(){
+  for(let i=0;i<NUM_P;i++){
+    px_[i]=Math.random()*1.96-0.98;
+    py_[i]=Math.random()*1.96-0.98;
+    vx_[i]=0; vy_[i]=0; pa_[i]=0;
+    cs_[i]=Math.random()<0.5?1:-1;
+    ms_[i]=0.6+Math.random()*0.8;
+  }
+}
+
+function updateParticles(){
+  const rms=au.smoothRms,peak=au.peakRms,ph=au.phase;
+  const wamt=rms*0.045+peak*0.022;
+  const eps=0.013;
+  const allTones=[...placedTones,...ghostTones];
+
+  for(let i=0;i<NUM_P;i++){
+    const x=px_[i], y=py_[i];
+    const xw=x+Math.sin(ph*0.85+y*2.0)*wamt;
+    const yw=y+Math.cos(ph*0.65+x*1.9)*wamt;
+
+    const v  =evalField(xw,yw);
+    const dvdx=(evalField(xw+eps,yw)-evalField(xw-eps,yw))/(2*eps);
+    const dvdy=(evalField(xw,yw+eps)-evalField(xw,yw-eps))/(2*eps);
+
+    const absV=Math.abs(v);
+    const near=absV<0.16;
+    const m=ms_[i];
+
+    // Nodal pull — proportional to distance from node
+    const pull=(0.0004+absV*0.0025)/m;
+    vx_[i]-=v*dvdx*pull;
+    vy_[i]-=v*dvdy*pull;
+
+    // Tangential creep on nodal lines
+    if(near){
+      const gl=Math.sqrt(dvdx*dvdx+dvdy*dvdy)+0.0001;
+      const creep=(0.00015+rms*0.00045)*cs_[i];
+      vx_[i]+=(-dvdy/gl)*creep;
+      vy_[i]+=(dvdx/gl)*creep;
+    }
+
+
+
+    // Minimal heat
+    vx_[i]+=(Math.random()-0.5)*(0.0006+rms*0.003);
+    vy_[i]+=(Math.random()-0.5)*(0.0006+rms*0.003);
+
+    // Damping — heavy near nodes, lighter in open space
+    const damp=near?0.93:0.968;
+    vx_[i]*=damp; vy_[i]*=damp;
+
+    px_[i]+=vx_[i]; py_[i]+=vy_[i];
+    if(px_[i]<-1.02)px_[i]=1.01; if(px_[i]>1.02)px_[i]=-1.01;
+    if(py_[i]<-1.02)py_[i]=1.01; if(py_[i]>1.02)py_[i]=-1.01;
+
+    // Opacity — only visible near nodal lines, no glow
+    const tgt=frameTotalW<0.001?0
+             :absV<0.055?0.95
+             :absV<0.20?0.95*(0.20-absV)/0.145
+             :0;
+    pa_[i]+=(tgt-pa_[i])*0.07;
+    if(pa_[i]<0)pa_[i]=0;
+    if(pa_[i]>1)pa_[i]=1;
+  }
+}
+
+// Batch draw — one ImageData write is much faster than many fillRect calls
+// We render particles directly into a typed array and blit once
+const partBuf=document.createElement('canvas');
+let pbCtx, pbImg;
+function initPartBuf(){
+  partBuf.width=W; partBuf.height=H;
+  pbCtx=partBuf.getContext('2d');
+  pbImg=pbCtx.createImageData(W,H);
+}
+
+function drawParticles(){
+  // Rebuild buffer if canvas was resized
+  if(partBuf.width!==W||partBuf.height!==H){
+    partBuf.width=W; partBuf.height=H;
+    pbCtx=partBuf.getContext('2d');
+    pbImg=pbCtx.createImageData(W,H);
+  }
+  const d=pbImg.data;
+  d.fill(0);
+
+  const scaleX=W*0.5, scaleY=H*0.5;
+
+  for(let i=0;i<NUM_P;i++){
+    const a=pa_[i];
+    if(a<0.015) continue;
+    const sx=Math.round((px_[i]+1)*scaleX);
+    const sy=Math.round((py_[i]+1)*scaleY);
+    if(sx<0||sx>=W||sy<0||sy>=H) continue;
+    const idx=(sy*W+sx)*4;
+    const alpha=Math.round(a*210);
+    const ea=d[idx+3];
+    d[idx]=195; d[idx+1]=182; d[idx+2]=145;
+    d[idx+3]=Math.min(255,ea+Math.round(alpha*0.7));
+  }
+  pbCtx.putImageData(pbImg,0,0);
+  ctx.drawImage(partBuf,0,0);
+}
+
+// ════════════════════════════════════════
+// MUSIC THEORY
+// ════════════════════════════════════════
+const SCALES={
+  pent_minor:   {ivs:[0,3,5,7,10]},
+  pent_major:   {ivs:[0,2,4,7,9]},
+  natural_minor:{ivs:[0,2,3,5,7,8,10]},
+  major:        {ivs:[0,2,4,5,7,9,11]},
+  dorian:       {ivs:[0,2,3,5,7,9,10]},
+};
+const PROGS={
+  pent_minor:   [[0],[2],[1],[3],[0],[4],[2],[1],[3],[0]],
+  pent_major:   [[0],[2],[3],[1],[0],[4],[1],[2],[3],[4]],
+  natural_minor:[[0],[3],[5],[4],[0],[2],[6],[4],[5],[3]],
+  major:        [[0],[3],[4],[2],[5],[3],[0],[4],[2],[6]],
+  dorian:       [[0],[1],[3],[4],[0],[2],[4],[3],[1],[0]],
+};
+const MELODY_PATTERNS=[
+  [0,2,1,3,0,1,2,0],[0,1,2,3,2,1,0,1],
+  [0,3,2,1,3,0,1,2],[2,1,0,2,3,1,2,0],[0,0,1,2,1,0,3,1],
+];
+const NOTE_MIDI={C:0,'C#':1,D:2,'D#':3,E:4,F:5,'F#':6,G:7,'G#':8,A:9,'A#':10,B:11};
+const NOTE_NAMES=['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+const midiToFreq=m=>440*Math.pow(2,(m-69)/12);
+const freqToName=f=>{
+  const midi=Math.round(69+12*Math.log2(f/440));
+  return NOTE_NAMES[((midi%12)+12)%12]+(Math.floor(midi/12)-1);
+};
+let scaleFreqs=[],rootMidi=0,currentScaleName='pent_minor',chordIdx=0;
+
+function rebuildScale(){
+  const key=document.getElementById('keySelect').value;
+  const sn=document.getElementById('scaleSelect').value;
+  currentScaleName=sn; rootMidi=NOTE_MIDI[key];
+  const{ivs}=SCALES[sn]; scaleFreqs=[];
+  for(let oct=2;oct<=5;oct++)for(const iv of ivs)scaleFreqs.push(midiToFreq(rootMidi+(oct+1)*12+iv));
+  applyChord(chordIdx,false);
+  regenerateGhostTones();
+  updateToneList();
+}
+function snap(raw){
+  let best=scaleFreqs[0],bd=Infinity;
+  for(const f of scaleFreqs){const d=Math.abs(f-raw);if(d<bd){bd=d;best=f;}}
+  return best;
+}
+function applyChord(idx,announce=true){
+  chordIdx=idx;
+  const sn=currentScaleName,{ivs}=SCALES[sn];
+  const prog=PROGS[sn],step=prog[idx%prog.length];
+  const chordIvs=step.map(d=>ivs[d%ivs.length]);
+  const biased=[];
+  for(let oct=2;oct<=5;oct++)for(const iv of ivs)
+    biased.push({freq:midiToFreq(rootMidi+(oct+1)*12+iv),isChord:chordIvs.includes(iv)});
+  const rootIv=ivs[step[0]%ivs.length];
+  const chordRoot=NOTE_NAMES[(rootMidi+rootIv+120)%12];
+  // Update frequencies without restarting nodes
+  for(const t of placedTones){
+    let best=null,bd=Infinity;
+    for(const{freq,isChord}of biased){const d=Math.abs(freq-t.freq)*(isChord?0.55:1);if(d<bd){bd=d;best=freq;}}
+    t.freq=best??snap(t.freq); t.name=freqToName(t.freq);
+  }
+  updateToneList();
+  if(announce){
+    const el=document.getElementById('chordName');
+    el.textContent=chordRoot; el.classList.add('show');
+    clearTimeout(el._t); el._t=setTimeout(()=>el.classList.remove('show'),1600);
+  }
+}
+
+// ════════════════════════════════════════
+// PLACED TONES
+// X position → step in 4-bar loop (16 steps = 4 beats × 4 bars)
+// Y position → pitch (mapped to scale)
+// ════════════════════════════════════════
+// ════════════════════════════════════════
+// SOUND PALETTE — 5 types, 5 nodes each = 25 max
+// ════════════════════════════════════════
+const PALETTE=[
+  { id:'pad',     label:'Drone',   color:'205,185,130', glow:'rgba(205,185,130,0.6)', decayMul:1.0 },
+  { id:'crystal', label:'Crystal', color:'190,145,215', glow:'rgba(190,145,215,0.6)', decayMul:1.4 },
+  { id:'shimmer', label:'Shimmer', color:'130,200,210', glow:'rgba(130,200,210,0.6)', decayMul:1.2 },
+  { id:'ether',   label:'Ether',   color:'160,215,170', glow:'rgba(160,215,170,0.6)', decayMul:0.8 },
+  { id:'pluck',   label:'Pluck',   color:'215,145,145', glow:'rgba(215,145,145,0.6)', decayMul:2.5 },
+];
+const MAX_PER_TYPE=5;
+let selectedPalette=0; // index into PALETTE
+
+function buildPalette(){
+  const el=document.getElementById('palette');
+  el.innerHTML=PALETTE.map((p,i)=>`
+    <button class="pal-btn${i===0?' selected':''}" id="pal-${i}"
+      style="--pal-glow:${p.glow}"
+      onclick="selectPalette(${i})">
+      <span class="pal-orb" style="
+        background:radial-gradient(circle at 38% 35%,rgba(255,255,255,0.6),rgba(${p.color},0.95) 55%,rgba(${p.color},0.25));
+        box-shadow:0 0 8px 2px rgba(${p.color},0.5)"></span>
+    </button>`).join('');
+}
+
+function selectPalette(i){
+  selectedPalette=i;
+  document.querySelectorAll('.pal-btn').forEach((b,j)=>b.classList.toggle('selected',j===i));
+}
+
+const LOOP_STEPS=16;
+let placedTones=[],toneIdCounter=0;
+
+function placeFromEvent(ex,ey){
+  ensureAudio();
+  const nx=(ex/W)*2-1, ny=(ey/H)*2-1;
+  for(const t of placedTones) if((t.nx-nx)**2+(t.ny-ny)**2<0.012) return;
+
+  const pal=PALETTE[selectedPalette];
+  // Evict oldest tone of same type if at per-type cap
+  const sameType=placedTones.filter(t=>t.type===pal.id);
+  if(sameType.length>=MAX_PER_TYPE){
+    const evicted=sameType[0];
+    stopToneNode(evicted,0.4);
+    placedTones=placedTones.filter(t=>t!==evicted);
+  }
+
+  const yNorm=1-(ey/H);
+  const scaleLen=scaleFreqs.length;
+  const scaleIdx=Math.round(yNorm*(scaleLen-1));
+  const freq=scaleFreqs[Math.max(0,Math.min(scaleLen-1,scaleIdx))];
+  // Record the exact position within the loop as a continuous time offset
+  const loopOffset=((audioCtx.currentTime - loopStartT) % LOOP_DUR + LOOP_DUR) % LOOP_DUR;
+  const id=++toneIdCounter;
+  const tone={id,nx,ny,px:ex,py:ey,freq,name:freqToName(freq),node:null,
+              type:pal.id,palIdx:selectedPalette,glow:0,loopOffset,lastFiredAt:-999};
+
+  placedTones.push(tone);
+  document.getElementById('hint').style.opacity='0';
+  updateToneList();
+  if(!isPlaying) togglePlay();
+  // Fire right now — lastFiredAt set to now so scheduler skips this cycle
+  const now=audioCtx.currentTime;
+  fireTone(tone, now);
+  // lastFiredAt is set inside fireTone to t0=now, so scheduler won't re-fire
+  // until the next loop cycle reaches loopOffset
+}
+
+// Fire tone — dispatches to correct builder by palette type
+function fireTone(tone, t0){
+  stopToneNode(tone, 0.05);
+  if(!audioCtx) return;
+  t0=t0||audioCtx.currentTime;
+  const G=0.038;
+  switch(tone.type){
+    case 'crystal': tone.node=buildCrystal(tone.freq,G,t0); break;
+    case 'shimmer': tone.node=buildShimmer(tone.freq,G,t0); break;
+    case 'ether':   tone.node=buildEther(tone.freq,G,t0);   break;
+    case 'pluck':   tone.node=buildPluck(tone.freq,G,t0);   break;
+    default:        tone.node=buildPad(tone.freq,G,t0);     break;
+  }
+  tone.glow=1.0;
+  tone.lastFiredAt=t0;
+}
+
+function stopToneNode(tone, fadeTime=1.5){
+  if(!tone.node) return;
+  try{ tone.node.stop(fadeTime); } catch(e){}
+  tone.node=null;
+}
+
+function removeTone(id){
+  const t=placedTones.find(x=>x.id===id);
+  if(t) stopToneNode(t, 0.5);
+  placedTones=placedTones.filter(x=>x.id!==id);
+  updateToneList();
+}
+function clearTones(){
+  for(const t of placedTones) stopToneNode(t, 0.4);
+  placedTones=[];
+  document.getElementById('hint').style.opacity='1';
+  updateToneList();
+}
+function updateToneList(){
+  const el=document.getElementById('toneList');
+  el.innerHTML=placedTones.map(t=>`<div class="tone-tag" id="tt-${t.id}" onclick="removeTone(${t.id})">${t.name}</div>`).join('');
+}
+function updateEnvelopes(){
+  for(const t of placedTones){
+    const dm=PALETTE[t.palIdx]?.decayMul??1;
+    t.glow*=Math.pow(0.996,dm);
+    if(t.glow<0.003) t.glow=0;
+  }
+}
+
+// Stub — no ghost tones
+function regenerateGhostTones(){}
+const ghostTones=[];
+
+// ════════════════════════════════════════
+// AUDIO ENGINE
+// ════════════════════════════════════════
+let audioCtx=null,masterGain=null,convolver=null;
+let analyser=null,freqBins=null,timeBins=null;
+
+function ensureAudio(){
+  if(audioCtx)return;
+  audioCtx=new(window.AudioContext||window.webkitAudioContext)();
+  masterGain=audioCtx.createGain(); masterGain.gain.value=0.48;
+  analyser=audioCtx.createAnalyser(); analyser.fftSize=2048; analyser.smoothingTimeConstant=0.5;
+  freqBins=new Uint8Array(analyser.frequencyBinCount); timeBins=new Uint8Array(analyser.fftSize);
+  // Dynamics compressor prevents any single loud node from clipping
+  const comp=audioCtx.createDynamicsCompressor();
+  comp.threshold.value=-18; comp.knee.value=6;
+  comp.ratio.value=10; comp.attack.value=0.001; comp.release.value=0.12;
+  convolver=audioCtx.createConvolver(); convolver.buffer=buildImpulse(5,2.2);
+  const wet=audioCtx.createGain(); wet.gain.value=0.42;
+  const dry=audioCtx.createGain(); dry.gain.value=0.52;
+  masterGain.connect(comp);
+  comp.connect(analyser);
+  comp.connect(dry); dry.connect(audioCtx.destination);
+  comp.connect(convolver); convolver.connect(wet); wet.connect(audioCtx.destination);
+}
+function buildImpulse(dur,decay){
+  const sr=audioCtx.sampleRate,len=Math.floor(sr*dur);
+  const buf=audioCtx.createBuffer(2,len,sr);
+  for(let ch=0;ch<2;ch++){const d=buf.getChannelData(ch);for(let i=0;i<len;i++)d[i]=(Math.random()*2-1)*Math.pow(1-i/len,decay);}
+  return buf;
+}
+function updateAudioState(){
+  if(!analyser){au.rms=0;au.smoothRms=0;return;}
+  analyser.getByteTimeDomainData(timeBins);
+  let ss=0;
+  for(let i=0;i<timeBins.length;i++){const s=(timeBins[i]-128)/128;ss+=s*s;}
+  const rms=Math.sqrt(ss/timeBins.length);
+  au.rms=rms; au.smoothRms+=(rms-au.smoothRms)*0.04;
+  au.peakRms=Math.max(au.peakRms*0.86,rms); au.phase+=rms*0.018;
+  analyser.getByteFrequencyData(freqBins);
+  const nyq=audioCtx.sampleRate/2,bHz=nyq/freqBins.length;
+  const getBand=freq=>{
+    const cb=Math.round(freq/bHz),hw=Math.max(4,Math.round(freq*0.08/bHz));
+    let sum=0,cnt=0;
+    for(let b=Math.max(0,cb-hw);b<=Math.min(freqBins.length-1,cb+hw);b++){sum+=freqBins[b];cnt++;}
+    const cb2=Math.round(freq*2/bHz),hw2=Math.max(3,Math.round(freq*0.05/bHz));
+    for(let b=Math.max(0,cb2-hw2);b<=Math.min(freqBins.length-1,cb2+hw2);b++){sum+=freqBins[b]*0.5;cnt+=0.5;}
+    return cnt>0?(sum/cnt)/255:0;
+  };
+  au.bands=placedTones.map(t=>getBand(t.freq));
+  // Nudge each tone's visual glow up if audio energy detected (prevents mismatch)
+  for(let i=0;i<placedTones.length;i++){
+    const b=au.bands[i]??0;
+    if(b>placedTones[i].glow) placedTones[i].glow=Math.min(1,placedTones[i].glow+b*0.1);
+  }
+}
+
+// PAD — shorter attack, decays to silence within ~8s so Chladni pattern stays dynamic
+function buildPad(freq,peakGain,t0){
+  const ac=audioCtx; t0=t0||ac.currentTime;
+  peakGain=Math.min(peakGain,0.042);
+  const vg=ac.createGain();
+  vg.gain.setValueAtTime(0,t0);
+  vg.gain.linearRampToValueAtTime(peakGain,t0+0.4);      // fast attack
+  vg.gain.setTargetAtTime(0.0001,t0+0.5,2.2);            // exponential decay, ~silent by 8s
+  vg.connect(masterGain);
+  const oscs=[];
+  for(const[det,gv]of[[-8,0.20],[0,0.28],[7,0.16],[14,0.08],[-15,0.03]]){
+    const o=ac.createOscillator(); o.type='sine'; o.frequency.value=freq; o.detune.value=det;
+    const lfo=ac.createOscillator(),lg=ac.createGain();
+    lfo.frequency.value=0.12+Math.random()*0.28; lg.gain.value=1.5+Math.random()*3;
+    lfo.connect(lg); lg.connect(o.detune); lfo.start(t0);
+    const g=ac.createGain(); g.gain.value=gv; o.connect(g); g.connect(vg); o.start(t0);
+    oscs.push({o,lfo});
+  }
+  const sh=ac.createOscillator(),sg=ac.createGain();
+  sh.type='triangle'; sh.frequency.value=freq*2.001;
+  sg.gain.setValueAtTime(0,t0); sg.gain.linearRampToValueAtTime(peakGain*0.03,t0+0.6);
+  sg.gain.setTargetAtTime(0.0001,t0+1,3);
+  sh.connect(sg); sg.connect(masterGain); sh.start(t0);
+  // Auto-stop oscillators after they've fully decayed
+  setTimeout(()=>{for(const{o,lfo}of oscs){try{o.stop();lfo.stop();}catch(e){}} try{sh.stop();}catch(e){}}, 12000);
+  return{stop(ft=0.8){
+    const t=ac.currentTime;
+    vg.gain.cancelScheduledValues(t); vg.gain.setValueAtTime(vg.gain.value,t); vg.gain.linearRampToValueAtTime(0,t+ft);
+    sg.gain.cancelScheduledValues(t); sg.gain.setValueAtTime(sg.gain.value,t); sg.gain.linearRampToValueAtTime(0,t+ft);
+    setTimeout(()=>{for(const{o,lfo}of oscs){try{o.stop();lfo.stop();}catch(e){}} try{sh.stop();}catch(e){}}, (ft+0.2)*1000);
+  }};
+}
+
+// KALIMBA — plucked/struck tone for melody ghost voices
+function buildKalimba(freq,peakGain,t0){
+  const ac=audioCtx; t0=t0||ac.currentTime;
+  peakGain=Math.min(peakGain,0.042); // hard cap — same ceiling as pad
+
+  const vg=ac.createGain();
+  vg.gain.setValueAtTime(peakGain,t0);
+  vg.gain.exponentialRampToValueAtTime(peakGain*0.001,t0+2.8);
+  vg.connect(masterGain);
+
+  // Fundamental — weight reduced so partials sum < 1
+  const o1=ac.createOscillator(); o1.type='sine'; o1.frequency.value=freq;
+  const g1=ac.createGain(); g1.gain.value=0.45; o1.connect(g1); g1.connect(vg); o1.start(t0); o1.stop(t0+3);
+
+  // 2nd harmonic — inharmonic metallic tine quality, fast decay
+  const o2=ac.createOscillator(); o2.type='sine'; o2.frequency.value=freq*2.756;
+  const g2=ac.createGain(); g2.gain.setValueAtTime(0.22,t0); g2.gain.exponentialRampToValueAtTime(0.001,t0+0.9);
+  o2.connect(g2); g2.connect(vg); o2.start(t0); o2.stop(t0+1);
+
+  // 3rd partial — fast decay click attack
+  const o3=ac.createOscillator(); o3.type='triangle'; o3.frequency.value=freq*4.1;
+  const g3=ac.createGain(); g3.gain.setValueAtTime(0.12,t0); g3.gain.exponentialRampToValueAtTime(0.001,t0+0.18);
+  o3.connect(g3); g3.connect(vg); o3.start(t0); o3.stop(t0+0.2);
+
+  // Short noise burst for attack click — quieter
+  const buf=ac.createBuffer(1,Math.floor(ac.sampleRate*0.012),ac.sampleRate);
+  const bd=buf.getChannelData(0); for(let i=0;i<bd.length;i++)bd[i]=Math.random()*2-1;
+  const ns=ac.createBufferSource(); ns.buffer=buf;
+  const ng=ac.createGain(); ng.gain.setValueAtTime(peakGain*0.08,t0); ng.gain.exponentialRampToValueAtTime(0.001,t0+0.012);
+  const bp=ac.createBiquadFilter(); bp.type='bandpass'; bp.frequency.value=freq*1.5; bp.Q.value=2;
+  ns.connect(bp); bp.connect(ng); ng.connect(masterGain);
+  ns.start(t0);
+
+  return{stop(){
+    try{o1.stop();o2.stop();o3.stop();}catch(e){}
+  }};
+}
+
+// CRYSTAL — bright bell-like tone for the third node type (rose/pink color)
+function buildCrystal(freq,peakGain,t0){
+  const ac=audioCtx; t0=t0||ac.currentTime;
+  peakGain=Math.min(peakGain,0.042);
+  const vg=ac.createGain();
+  vg.gain.setValueAtTime(peakGain*0.9,t0);
+  vg.gain.exponentialRampToValueAtTime(peakGain*0.001,t0+4.5);
+  vg.connect(masterGain);
+  // Fundamental sine
+  const o1=ac.createOscillator(); o1.type='sine'; o1.frequency.value=freq;
+  const g1=ac.createGain(); g1.gain.value=0.55; o1.connect(g1); g1.connect(vg); o1.start(t0); o1.stop(t0+5);
+  // Slightly detuned second for shimmer
+  const o2=ac.createOscillator(); o2.type='sine'; o2.frequency.value=freq*1.003;
+  const g2=ac.createGain(); g2.gain.value=0.28; o2.connect(g2); g2.connect(vg); o2.start(t0); o2.stop(t0+5);
+  // Inharmonic partial for bell tone
+  const o3=ac.createOscillator(); o3.type='sine'; o3.frequency.value=freq*3.73;
+  const g3=ac.createGain(); g3.gain.setValueAtTime(0.22,t0); g3.gain.exponentialRampToValueAtTime(0.001,t0+0.6);
+  o3.connect(g3); g3.connect(vg); o3.start(t0); o3.stop(t0+0.7);
+  // Upper octave shimmer — fades fast
+  const o4=ac.createOscillator(); o4.type='sine'; o4.frequency.value=freq*2.0;
+  const g4=ac.createGain(); g4.gain.setValueAtTime(0.18,t0); g4.gain.exponentialRampToValueAtTime(0.001,t0+1.2);
+  o4.connect(g4); g4.connect(vg); o4.start(t0); o4.stop(t0+1.3);
+  return{stop(ft=2.5){
+    const t=ac.currentTime;
+    vg.gain.cancelScheduledValues(t); vg.gain.setValueAtTime(vg.gain.value,t); vg.gain.exponentialRampToValueAtTime(0.0001,t+ft);
+    setTimeout(()=>{try{o1.stop();o2.stop();o3.stop();o4.stop();}catch(e){}}, (ft+0.2)*1000);
+  }};
+}
+
+// SHIMMER — airy high overtone wash, teal color
+function buildShimmer(freq,peakGain,t0){
+  const ac=audioCtx; t0=t0||ac.currentTime;
+  peakGain=Math.min(peakGain,0.038);
+  const vg=ac.createGain();
+  vg.gain.setValueAtTime(0,t0);
+  vg.gain.linearRampToValueAtTime(peakGain,t0+0.6);
+  vg.gain.setTargetAtTime(0.0001,t0+0.8,3.5);
+  vg.connect(masterGain);
+  // Three high-register detuned sines — glassy, airy
+  const oscs=[];
+  for(const[mul,det,gv]of[[2.0,0,0.30],[2.0,8,0.22],[3.0,0,0.18],[4.0,-5,0.12],[0.5,0,0.15]]){
+    const o=ac.createOscillator(); o.type='sine';
+    o.frequency.value=freq*mul; o.detune.value=det;
+    const g=ac.createGain(); g.gain.value=gv;
+    // Slow chorus LFO per partial
+    const lfo=ac.createOscillator(),lg=ac.createGain();
+    lfo.frequency.value=0.08+Math.random()*0.18; lg.gain.value=2+Math.random()*5;
+    lfo.connect(lg); lg.connect(o.detune); lfo.start(t0);
+    o.connect(g); g.connect(vg); o.start(t0);
+    oscs.push({o,lfo});
+  }
+  setTimeout(()=>{for(const{o,lfo}of oscs){try{o.stop();lfo.stop();}catch(e){}}},14000);
+  return{stop(ft=0.8){
+    const t=ac.currentTime;
+    vg.gain.cancelScheduledValues(t); vg.gain.setValueAtTime(vg.gain.value,t); vg.gain.linearRampToValueAtTime(0,t+ft);
+    setTimeout(()=>{for(const{o,lfo}of oscs){try{o.stop();lfo.stop();}catch(e){}}}, (ft+0.2)*1000);
+  }};
+}
+
+// ETHER — deep slow-attack pad with subtle beating, green color
+function buildEther(freq,peakGain,t0){
+  const ac=audioCtx; t0=t0||ac.currentTime;
+  peakGain=Math.min(peakGain,0.038);
+  const vg=ac.createGain();
+  vg.gain.setValueAtTime(0,t0);
+  vg.gain.linearRampToValueAtTime(peakGain,t0+1.2);       // slow attack
+  vg.gain.setTargetAtTime(0.0001,t0+1.4,4.5);             // very slow decay
+  vg.connect(masterGain);
+  const oscs=[];
+  // Sub octave + fundamental + fifth + octave, all gently detuned
+  for(const[mul,det,gv]of[[0.5,0,0.25],[1.0,0,0.32],[1.0,4,0.20],[1.502,0,0.14],[2.0,-3,0.09]]){
+    const o=ac.createOscillator(); o.type='sine';
+    o.frequency.value=freq*mul; o.detune.value=det;
+    // Beating LFO — very slow
+    const lfo=ac.createOscillator(),lg=ac.createGain();
+    lfo.frequency.value=0.04+Math.random()*0.12; lg.gain.value=1+Math.random()*3;
+    lfo.connect(lg); lg.connect(o.detune); lfo.start(t0);
+    const g=ac.createGain(); g.gain.value=gv;
+    o.connect(g); g.connect(vg); o.start(t0);
+    oscs.push({o,lfo});
+  }
+  setTimeout(()=>{for(const{o,lfo}of oscs){try{o.stop();lfo.stop();}catch(e){}}},18000);
+  return{stop(ft=1.5){
+    const t=ac.currentTime;
+    vg.gain.cancelScheduledValues(t); vg.gain.setValueAtTime(vg.gain.value,t); vg.gain.linearRampToValueAtTime(0,t+ft);
+    setTimeout(()=>{for(const{o,lfo}of oscs){try{o.stop();lfo.stop();}catch(e){}}}, (ft+0.2)*1000);
+  }};
+}
+
+// PLUCK — percussive Karplus-Strong style pluck, red/warm color
+function buildPluck(freq,peakGain,t0){
+  const ac=audioCtx; t0=t0||ac.currentTime;
+  peakGain=Math.min(peakGain,0.038);
+  const vg=ac.createGain();
+  vg.gain.setValueAtTime(peakGain,t0);
+  vg.gain.exponentialRampToValueAtTime(0.0001,t0+1.8);    // sharp pluck decay
+  vg.connect(masterGain);
+  // Fundamental + harmonics, all fast-decaying
+  const o1=ac.createOscillator(); o1.type='triangle'; o1.frequency.value=freq;
+  const g1=ac.createGain(); g1.gain.value=0.5; o1.connect(g1); g1.connect(vg); o1.start(t0); o1.stop(t0+2.2);
+  const o2=ac.createOscillator(); o2.type='sine'; o2.frequency.value=freq*2.01;
+  const g2=ac.createGain(); g2.gain.setValueAtTime(0.3,t0); g2.gain.exponentialRampToValueAtTime(0.001,t0+0.5);
+  o2.connect(g2); g2.connect(vg); o2.start(t0); o2.stop(t0+0.6);
+  const o3=ac.createOscillator(); o3.type='sine'; o3.frequency.value=freq*3.0;
+  const g3=ac.createGain(); g3.gain.setValueAtTime(0.15,t0); g3.gain.exponentialRampToValueAtTime(0.001,t0+0.25);
+  o3.connect(g3); g3.connect(vg); o3.start(t0); o3.stop(t0+0.3);
+  // Noise click attack
+  const buf=ac.createBuffer(1,Math.floor(ac.sampleRate*0.018),ac.sampleRate);
+  const bd=buf.getChannelData(0); for(let i=0;i<bd.length;i++)bd[i]=Math.random()*2-1;
+  const ns=ac.createBufferSource(); ns.buffer=buf;
+  const ng=ac.createGain(); ng.gain.setValueAtTime(peakGain*0.12,t0); ng.gain.exponentialRampToValueAtTime(0.001,t0+0.018);
+  const bp=ac.createBiquadFilter(); bp.type='bandpass'; bp.frequency.value=freq*1.8; bp.Q.value=3;
+  ns.connect(bp); bp.connect(ng); ng.connect(masterGain); ns.start(t0);
+  return{stop(ft=0.3){
+    const t=ac.currentTime;
+    vg.gain.cancelScheduledValues(t); vg.gain.setValueAtTime(vg.gain.value,t); vg.gain.linearRampToValueAtTime(0,t+ft);
+    setTimeout(()=>{try{o1.stop();o2.stop();o3.stop();}catch(e){}}, (ft+0.1)*1000);
+  }};
+}
+
+// ════════════════════════════════════════
+// CONTINUOUS LOOPING SEQUENCER
+// Each tone has a loopOffset (0..LOOP_DUR seconds) — no grid, no quantization.
+// The scheduler scans a sliding lookahead window each tick and fires tones
+// whose loopOffset falls inside the window.
+// ════════════════════════════════════════
+let isPlaying=false;
+const BPM=88;
+const BEAT_SEC=60/BPM;
+const LOOP_DUR=LOOP_STEPS*BEAT_SEC;
+
+const SCHED_INTERVAL=25;          // ms between scheduler ticks
+const SCHED_AHEAD=0.08;           // seconds lookahead window
+
+let loopStartT=0, schedId=null;
+let lastWindowEnd=0;              // tracks end of last scheduled window
+
+function buildBeatBar(){
+  const el=document.getElementById('beatBar'); el.innerHTML='';
+  for(let s=0;s<LOOP_STEPS;s++){
+    const d=document.createElement('div');
+    d.className='beat-dot'+(s%4===0?' bar-start':'');
+    d.id=`bd-${s}`; el.appendChild(d);
+  }
+}
+
+let lastLitStep=-1;
+function updateBeatVisual(){
+  if(!isPlaying||!audioCtx) return;
+  const elapsed=(audioCtx.currentTime-loopStartT)%LOOP_DUR;
+  const step=Math.floor(elapsed/BEAT_SEC)%LOOP_STEPS;
+  if(step===lastLitStep) return;
+  const prev=document.getElementById(`bd-${lastLitStep}`);
+  if(prev) prev.classList.remove('lit');
+  const cur=document.getElementById(`bd-${step}`);
+  if(cur) cur.classList.add('lit');
+  lastLitStep=step;
+}
+
+function scheduler(){
+  if(!audioCtx) return;
+  const now=audioCtx.currentTime;
+  const windowEnd=now+SCHED_AHEAD;
+
+  // How many full loops have elapsed up to lastWindowEnd and windowEnd
+  for(const tone of placedTones){
+    const off=tone.loopOffset; // seconds into loop where this tone lives
+
+    // Find every loop-cycle trigger time that falls in (lastWindowEnd, windowEnd]
+    // Loop cycle n fires at: loopStartT + n*LOOP_DUR + off
+    const cycleStart=(lastWindowEnd - loopStartT - off) / LOOP_DUR;
+    const firstN=Math.ceil(cycleStart);
+    for(let n=firstN; ; n++){
+      const fireT=loopStartT + n*LOOP_DUR + off;
+      if(fireT > windowEnd) break;
+      if(fireT <= lastWindowEnd) continue; // already scheduled
+      // Skip if this is the same fire event we did on placement
+      if(fireT <= tone.lastFiredAt + 0.02) continue;
+      fireTone(tone, fireT);
+      // Visual flash
+      const ms=Math.max(0,(fireT-now)*1000);
+      const tid=tone.id;
+      setTimeout(()=>{
+        const el=document.getElementById(`tt-${tid}`);
+        if(el){el.classList.add('lit');clearTimeout(el._lt);el._lt=setTimeout(()=>el.classList.remove('lit'),300);}
+      }, ms);
+    }
+  }
+  lastWindowEnd=windowEnd;
+}
+
+function startSequencer(){
+  ensureAudio();
+  loopStartT=audioCtx.currentTime;
+  lastWindowEnd=audioCtx.currentTime;
+  schedId=setInterval(scheduler, SCHED_INTERVAL);
+}
+
+function togglePlay(){
+  ensureAudio();
+  isPlaying=!isPlaying;
+  const btn=document.getElementById('playBtn');
+  if(isPlaying){
+    btn.textContent='Stop'; btn.classList.add('playing');
+    startSequencer();
+  } else {
+    btn.textContent='Play'; btn.classList.remove('playing');
+    clearInterval(schedId); schedId=null;
+    for(const tone of placedTones) stopToneNode(tone, 1.0);
+    const prev=document.getElementById(`bd-${lastLitStep}`);
+    if(prev) prev.classList.remove('lit');
+    lastLitStep=-1;
+  }
+}
+
+// ════════════════════════════════════════
+// NODE GLOW — each tone glows dynamically from its own decay envelope
+// No rings, no pulses — just a soft luminous orb that breathes and fades
+// ════════════════════════════════════════
+
+function drawToneMarkers(){
+  for(let i=0;i<placedTones.length;i++){
+    const tone=placedTones[i];
+    const g=tone.glow;
+    const pal=PALETTE[tone.palIdx]??PALETTE[0];
+    const c=pal.color; // "r,g,b" string
+
+    if(g<0.003){
+      ctx.globalAlpha=0.12;
+      ctx.beginPath(); ctx.arc(tone.px,tone.py,1.2,0,Math.PI*2);
+      ctx.fillStyle=`rgba(${c},1)`; ctx.fill();
+      continue;
+    }
+
+    // Outer diffuse halo
+    const hR=6+g*52;
+    const grad=ctx.createRadialGradient(tone.px,tone.py,0,tone.px,tone.py,hR);
+    grad.addColorStop(0,  `rgba(${c},${g*0.6})`);
+    grad.addColorStop(0.4,`rgba(${c},${g*0.22})`);
+    grad.addColorStop(1,  'rgba(0,0,0,0)');
+    ctx.globalAlpha=1;
+    ctx.beginPath(); ctx.arc(tone.px,tone.py,hR,0,Math.PI*2);
+    ctx.fillStyle=grad; ctx.fill();
+
+    // Mid glow disc
+    const mR=2+g*10;
+    ctx.globalAlpha=0.45+g*0.45;
+    ctx.beginPath(); ctx.arc(tone.px,tone.py,mR,0,Math.PI*2);
+    ctx.fillStyle=`rgba(${c},1)`; ctx.fill();
+
+    // Bright core
+    ctx.globalAlpha=0.75+g*0.25;
+    ctx.beginPath(); ctx.arc(tone.px,tone.py,1.5,0,Math.PI*2);
+    ctx.fillStyle=`rgba(255,255,255,${0.4+g*0.5})`; ctx.fill();
+  }
+  ctx.globalAlpha=1;
+}
+
+// Keep stubs so nothing breaks
+function drawBeatFlashes(){ }
+let ringPulses=[];
+function spawnRingPulse(){}
+
+// ════════════════════════════════════════
+// RENDER LOOP
+// ════════════════════════════════════════
+function render(ts){
+  requestAnimationFrame(render);
+  updateAudioState();
+  updateEnvelopes();
+
+  const allTones=[...placedTones];
+  buildFrameModes(allTones);
+
+  // Black fade
+  ctx.fillStyle='#000000';
+  ctx.globalAlpha=0.35;
+  ctx.fillRect(0,0,W,H);
+  ctx.globalAlpha=1;
+
+  updateParticles();
+  drawParticles();
+  drawToneMarkers();
+  updateBeatVisual();
+}
+
+// ════════════════════════════════════════
+// INPUT
+// ════════════════════════════════════════
+let pDown=false,lpx=-9999,lpy=-9999;
+function onDown(x,y){pDown=true;placeFromEvent(x,y);lpx=x;lpy=y;}
+function onMove(x,y){if(!pDown)return;if(Math.hypot(x-lpx,y-lpy)>28){placeFromEvent(x,y);lpx=x;lpy=y;}}
+canvas.addEventListener('mousedown', e=>onDown(e.clientX,e.clientY));
+canvas.addEventListener('mousemove', e=>onMove(e.clientX,e.clientY));
+canvas.addEventListener('mouseup',   ()=>{pDown=false;});
+canvas.addEventListener('mouseleave',()=>{pDown=false;});
+canvas.addEventListener('touchstart',e=>{e.preventDefault();const t=e.touches[0];onDown(t.clientX,t.clientY);},{passive:false});
+canvas.addEventListener('touchmove', e=>{e.preventDefault();const t=e.touches[0];onMove(t.clientX,t.clientY);},{passive:false});
+canvas.addEventListener('touchend',  ()=>{pDown=false;});
+
+// ════════════════════════════════════════
+// INIT
+// ════════════════════════════════════════
+rebuildScale();
+buildPalette();
+initParticles();
+initPartBuf();
+buildBeatBar();
+requestAnimationFrame(render);
+</script>
+</body>
+</html>
