@@ -401,36 +401,98 @@ function drawParticles(){
 // MUSIC THEORY
 // ════════════════════════════════════════
 const SCALES={
-  pent_minor:   {ivs:[0,3,5,7,10]},
-  pent_major:   {ivs:[0,2,4,7,9]},
-  natural_minor:{ivs:[0,2,3,5,7,8,10]},
-  major:        {ivs:[0,2,4,5,7,9,11]},
-  dorian:       {ivs:[0,2,3,5,7,9,10]},
+  pent_minor:    {ivs:[0,3,5,7,10]},
+  pent_major:    {ivs:[0,2,4,7,9]},
+  natural_minor: {ivs:[0,2,3,5,7,8,10]},
+  major:         {ivs:[0,2,4,5,7,9,11]},
+  dorian:        {ivs:[0,2,3,5,7,9,10]},
+  mixolydian:    {ivs:[0,2,4,5,7,9,10]},
+  phrygian:      {ivs:[0,1,3,5,7,8,10]},
+  lydian:        {ivs:[0,2,4,6,7,9,11]},
+  harmonic_minor:{ivs:[0,2,3,5,7,8,11]},
+  locrian:       {ivs:[0,1,3,5,6,8,10]},
+  whole_tone:    {ivs:[0,2,4,6,8,10]},
+  diminished:    {ivs:[0,2,3,5,6,8,9,11]},
 };
-// 10 ambient chord sequences — each is 10 scale-degree steps, one per loop cycle
-// Scale degree indices: 0=root, 1=2nd, 2=3rd, 3=4th, 4=5th, 5=6th, 6=7th
+
+// ── Per-chord mode assignment ─────────────────────────────────────────────
+// Each chord step in a sequence carries its own modal colour.
+// chord quality codes:  M=major  m=minor  7=dominant7  m7=minor7
+//                       M7=major7  dim=diminished  aug=augmented  sus=suspended
+// The mode assigned is the most idiomatic scale to improvise over that chord.
+const CHORD_MODE_MAP={
+  M:   'major',
+  M7:  'lydian',
+  m:   'natural_minor',
+  m7:  'dorian',
+  7:   'mixolydian',
+  dim: 'locrian',
+  aug: 'whole_tone',
+  sus: 'mixolydian',
+  phr: 'phrygian',
+  hm:  'harmonic_minor',
+};
+
+// 10 ambient chord sequences — now each step carries { deg, quality }
+// deg = scale degree index (0=root … 6=7th of the parent key)
+// quality = chord type key from CHORD_MODE_MAP
 const AMBIENT_SEQS=[
-  { name:'Drift',       sub:'i — III — VII — iv',
-    steps:[0,2,6,3,0,2,6,3,0,2] },
-  { name:'Dissolve',    sub:'i — v — VI — III',
-    steps:[0,4,5,2,0,4,5,2,0,4] },
-  { name:'Liminal',     sub:'I — II — vi — IV',
-    steps:[0,1,5,3,0,1,5,3,0,1] },
-  { name:'Stillwater',  sub:'i — VII — VI — VII',
-    steps:[0,6,5,6,0,6,5,6,0,6] },
-  { name:'Frostlight',  sub:'I — iii — IV — I',
-    steps:[0,2,3,0,2,3,0,2,3,0] },
-  { name:'Nocturne',    sub:'i — VI — III — VII',
-    steps:[0,5,2,6,0,5,2,6,0,5] },
-  { name:'Spectral',    sub:'I — V — vi — iii',
-    steps:[0,4,5,2,4,0,5,2,4,0] },
-  { name:'Undertow',    sub:'i — iv — III — VI',
-    steps:[0,3,2,5,0,3,2,5,0,3] },
-  { name:'Ashfield',    sub:'I — IV — I — V',
-    steps:[0,3,0,4,0,3,0,4,0,3] },
-  { name:'Pale Orbit',  sub:'i — II — v — VI',
-    steps:[0,1,4,5,0,1,4,5,0,1] },
+  { name:'Drift',      sub:'im — IIIM — VIIM — ivm',
+    steps:[{deg:0,q:'m'},{deg:2,q:'M'},{deg:6,q:'M'},{deg:3,q:'m'},
+           {deg:0,q:'m'},{deg:2,q:'M'},{deg:6,q:'M'},{deg:3,q:'m'},
+           {deg:0,q:'m'},{deg:2,q:'M'}] },
+  { name:'Dissolve',   sub:'im — vm — VIM — IIIM',
+    steps:[{deg:0,q:'m'},{deg:4,q:'m'},{deg:5,q:'M'},{deg:2,q:'M'},
+           {deg:0,q:'m'},{deg:4,q:'m'},{deg:5,q:'M'},{deg:2,q:'M'},
+           {deg:0,q:'m'},{deg:4,q:'m'}] },
+  { name:'Liminal',    sub:'IM — II7 — vim — IVM',
+    steps:[{deg:0,q:'M'},{deg:1,q:'7'},{deg:5,q:'m'},{deg:3,q:'M'},
+           {deg:0,q:'M'},{deg:1,q:'7'},{deg:5,q:'m'},{deg:3,q:'M'},
+           {deg:0,q:'M'},{deg:1,q:'7'}] },
+  { name:'Stillwater', sub:'im — VIIM — VIM — VIIM',
+    steps:[{deg:0,q:'m'},{deg:6,q:'M'},{deg:5,q:'M'},{deg:6,q:'M'},
+           {deg:0,q:'m'},{deg:6,q:'M'},{deg:5,q:'M'},{deg:6,q:'M'},
+           {deg:0,q:'m'},{deg:6,q:'M'}] },
+  { name:'Frostlight',  sub:'IM — iiim — IVM — IM',
+    steps:[{deg:0,q:'M'},{deg:2,q:'m'},{deg:3,q:'M'},{deg:0,q:'M'},
+           {deg:2,q:'m'},{deg:3,q:'M'},{deg:0,q:'M'},{deg:2,q:'m'},
+           {deg:3,q:'M'},{deg:0,q:'M'}] },
+  { name:'Nocturne',   sub:'im — VIM — IIIM — VIIM',
+    steps:[{deg:0,q:'m'},{deg:5,q:'M'},{deg:2,q:'M'},{deg:6,q:'M'},
+           {deg:0,q:'m'},{deg:5,q:'M'},{deg:2,q:'M'},{deg:6,q:'M'},
+           {deg:0,q:'m'},{deg:5,q:'M'}] },
+  { name:'Spectral',   sub:'IM7 — VM — vim — iiim',
+    steps:[{deg:0,q:'M7'},{deg:4,q:'M'},{deg:5,q:'m'},{deg:2,q:'m'},
+           {deg:4,q:'M'},{deg:0,q:'M7'},{deg:5,q:'m'},{deg:2,q:'m'},
+           {deg:4,q:'M'},{deg:0,q:'M7'}] },
+  { name:'Undertow',   sub:'im — ivm — IIIdim — VIM',
+    steps:[{deg:0,q:'m'},{deg:3,q:'m'},{deg:2,q:'dim'},{deg:5,q:'M'},
+           {deg:0,q:'m'},{deg:3,q:'m'},{deg:2,q:'dim'},{deg:5,q:'M'},
+           {deg:0,q:'m'},{deg:3,q:'m'}] },
+  { name:'Ashfield',   sub:'IM — IVM — IM — V7',
+    steps:[{deg:0,q:'M'},{deg:3,q:'M'},{deg:0,q:'M'},{deg:4,q:'7'},
+           {deg:0,q:'M'},{deg:3,q:'M'},{deg:0,q:'M'},{deg:4,q:'7'},
+           {deg:0,q:'M'},{deg:3,q:'M'}] },
+  { name:'Pale Orbit', sub:'im — IIphr — vm — VIM',
+    steps:[{deg:0,q:'m'},{deg:1,q:'phr'},{deg:4,q:'m'},{deg:5,q:'M'},
+           {deg:0,q:'m'},{deg:1,q:'phr'},{deg:4,q:'m'},{deg:5,q:'M'},
+           {deg:0,q:'m'},{deg:1,q:'phr'}] },
 ];
+
+// ── Derive the mode name (for scale building) for a given sequence step ──
+function modeForStep(stepIdx){
+  if(currentMode!=='sequence') return currentScaleName;
+  const seq=AMBIENT_SEQS[selectedSeqIdx];
+  const step=seq.steps[stepIdx % seq.steps.length];
+  return CHORD_MODE_MAP[step.q] ?? currentScaleName;
+}
+
+// ── Get the scale-degree index for a step (works with new {deg,q} format) ──
+function degForStep(stepIdx){
+  const seq=AMBIENT_SEQS[selectedSeqIdx];
+  const step=seq.steps[stepIdx % seq.steps.length];
+  return typeof step==='object' ? step.deg : step; // back-compat
+}
 let selectedSeqIdx=0; // which of the 10 ambient sequences is active
 const MELODY_PATTERNS=[
   [0,2,1,3,0,1,2,0],[0,1,2,3,2,1,0,1],
@@ -460,62 +522,102 @@ function snap(raw){
   for(const f of scaleFreqs){const d=Math.abs(f-raw);if(d<bd){bd=d;best=f;}}
   return best;
 }
-// Build a full scale transposed to the chord root for the given sequence step.
-// Used when placing tones during sequence mode so new notes are in the current chord.
+// Build a full scale for the given sequence step using the chord's own mode.
+// e.g. a dominant-7 chord step gets Mixolydian, a minor chord gets Dorian, etc.
+// This means painted notes are always drawn from the correct modal colour.
 function buildChordScaleFreqs(stepIdx){
-  const{ivs}=SCALES[currentScaleName];
-  const seq=AMBIENT_SEQS[selectedSeqIdx];
-  const degreeIdx=seq.steps[stepIdx % seq.steps.length];
-  const scaleDeg=degreeIdx % ivs.length;
-  const chordRootIv=ivs[scaleDeg]; // semitones from key root to chord root
+  const modeName = modeForStep(stepIdx);          // e.g. 'dorian', 'mixolydian' …
+  const{ivs}=SCALES[modeName];
+  // Find the chord root in semitones from the global key root
+  const parentIvs=SCALES[currentScaleName].ivs;
+  const deg=degForStep(stepIdx) % parentIvs.length;
+  const chordRootIv=parentIvs[deg];
   const freqs=[];
   for(let oct=2;oct<=5;oct++)
     for(const iv of ivs)
       freqs.push(midiToFreq(rootMidi + chordRootIv + (oct+1)*12 + iv));
   return freqs;
 }
-// Compute the target frequency for a tone given a chord step index.
-// Transposes the tone to the nearest occurrence of the target scale degree,
-// preserving the tone's relative octave position as closely as possible.
-function freqForChordStep(tone, stepIdx){
-  const sn=currentScaleName,{ivs}=SCALES[sn];
-  const seq=AMBIENT_SEQS[selectedSeqIdx];
-  const degreeIdx = seq.steps[stepIdx % seq.steps.length];
-  const scaleDeg = degreeIdx % ivs.length;
-  const chordRootIv = ivs[scaleDeg]; // semitone offset of chord root from key root
+// Build frequencies for chord tones only (root, major/minor 3rd, 5th, 7th)
+// derived from the chord quality of the current step.
+function buildChordToneFreqs(stepIdx){
+  const parentIvs=SCALES[currentScaleName].ivs;
+  const deg=degForStep(stepIdx) % parentIvs.length;
+  const chordRootIv=parentIvs[deg];
+  const chordRootMidi=rootMidi+chordRootIv;
+  // Determine chord quality intervals
+  const step=AMBIENT_SEQS[selectedSeqIdx].steps[stepIdx % AMBIENT_SEQS[selectedSeqIdx].steps.length];
+  const q=typeof step==='object'?step.q:'M';
+  // Intervals above chord root for each quality
+  const CHORD_IVLS={
+    M:  [0,4,7,11],   // maj7
+    M7: [0,4,7,11],
+    m:  [0,3,7,10],   // m7
+    m7: [0,3,7,10],
+    '7':[0,4,7,10],   // dom7
+    dim:[0,3,6,9],    // dim7
+    aug:[0,4,8,11],
+    sus:[0,5,7,10],
+    phr:[0,3,7,10],
+    hm: [0,3,7,11],
+  };
+  const ivls=CHORD_IVLS[q]??[0,4,7,11];
+  const freqs=[];
+  for(let oct=2;oct<=5;oct++)
+    for(const iv of ivls)
+      freqs.push(midiToFreq(chordRootMidi+(oct+1)*12+iv));
+  return freqs;
+}
 
-  // Find which scale degree the tone was placed on (relative to key root)
-  const baseMidi = Math.round(69 + 12*Math.log2(tone.baseFreq/440));
-  const baseSemi = ((baseMidi - rootMidi) % 12 + 12) % 12;
-  let closestDeg=0, closestDist=Infinity;
+// Compute the target frequency for a tone given a chord step index.
+// Chord-snap tones (Drone/Shimmer/Ether) stay on chord tones (root/3/5/7).
+// Mode-snap tones (Crystal/Pluck) voice into the chord's full modal scale.
+function freqForChordStep(tone, stepIdx){
+  const parentIvs=SCALES[currentScaleName].ivs;
+  const deg=degForStep(stepIdx) % parentIvs.length;
+  const chordRootIv=parentIvs[deg];
+  const chordRootMidi=rootMidi+chordRootIv;
+  const baseMidi=Math.round(69+12*Math.log2(tone.baseFreq/440));
+  const fromRoot=((baseMidi-chordRootMidi)%12+12)%12;
+
+  // Choose interval set based on this tone's palette snapMode
+  const pal=PALETTE[tone.palIdx]??PALETTE[0];
+  let ivs;
+  if(pal.snapMode==='chord'){
+    // Chord tones only
+    const seq=AMBIENT_SEQS[selectedSeqIdx];
+    const step=seq.steps[stepIdx % seq.steps.length];
+    const q=typeof step==='object'?step.q:'M';
+    const CHORD_IVLS={M:[0,4,7,11],M7:[0,4,7,11],m:[0,3,7,10],m7:[0,3,7,10],
+      '7':[0,4,7,10],dim:[0,3,6,9],aug:[0,4,8,11],sus:[0,5,7,10],phr:[0,3,7,10],hm:[0,3,7,11]};
+    ivs=CHORD_IVLS[q]??[0,4,7,11];
+  } else {
+    // Full modal scale
+    ivs=SCALES[modeForStep(stepIdx)].ivs;
+  }
+
+  let closestDeg=0,closestDist=Infinity;
   for(let d=0;d<ivs.length;d++){
-    const dist=Math.min(Math.abs(ivs[d]-baseSemi), 12-Math.abs(ivs[d]-baseSemi));
+    const dist=Math.min(Math.abs(ivs[d]-fromRoot),12-Math.abs(ivs[d]-fromRoot));
     if(dist<closestDist){closestDist=dist;closestDeg=d;}
   }
-  // Transpose: shift the tone by the same number of semitones as the chord root shifts
-  // This keeps the tone's relative position within the chord intact
-  const shiftSemis = chordRootIv; // how far chord root is from key root
-  const targetMidiBase = baseMidi + shiftSemis;
-
-  // Find the octave-adjusted candidate closest to the original pitch
+  const targetIv=ivs[closestDeg];
   const candidates=[];
-  for(let o=-2;o<=2;o++) candidates.push(midiToFreq(targetMidiBase + o*12));
-  let best=candidates[0], bd=Infinity;
+  for(let oct=2;oct<=5;oct++)
+    candidates.push(midiToFreq(chordRootMidi+(oct+1)*12+targetIv));
+  let best=candidates[0],bd=Infinity;
   for(const f of candidates){
-    const d=Math.abs(f - tone.baseFreq);
+    const d=Math.abs(f-tone.baseFreq);
     if(d<bd){bd=d;best=f;}
   }
   return best;
 }
 
 function chordRootName(stepIdx){
-  const sn=currentScaleName,{ivs}=SCALES[sn];
-  const seq=AMBIENT_SEQS[selectedSeqIdx];
-  const degreeIdx = currentMode==='sequence'
-    ? seq.steps[stepIdx % seq.steps.length]
-    : 0;
-  const scaleDeg = degreeIdx % ivs.length;
-  const rootIv = ivs[scaleDeg];
+  if(currentMode!=='sequence') return NOTE_NAMES[rootMidi%12];
+  const parentIvs=SCALES[currentScaleName].ivs;
+  const deg=degForStep(stepIdx) % parentIvs.length;
+  const rootIv=parentIvs[deg];
   return NOTE_NAMES[(rootMidi+rootIv+120)%12];
 }
 
@@ -598,6 +700,9 @@ function updateSequenceMode(){
     cur.innerHTML=chordRoot+'<span>'+seq.name+' · step '+(seqChordIdx+1)+' of '+seq.steps.length+'</span>';
     cur.classList.add('show');
   }
+  // Reflect current chord's mode in the scale selector — purely informational
+  const modeEl=document.getElementById('scaleSelect');
+  if(modeEl){ const m=modeForStep(seqChordIdx); if(SCALES[m]) modeEl.value=m; }
   // keep tone list names in sync
   for(const t of placedTones){ t.name=freqToName(t.freq); }
   updateToneList();
@@ -632,12 +737,13 @@ function pickSeq(i){
 // ════════════════════════════════════════
 // SOUND PALETTE — 5 types, 5 nodes each = 25 max
 // ════════════════════════════════════════
+// snapMode: 'chord' = only chord tones (root/3/5/7), 'mode' = full modal scale
 const PALETTE=[
-  { id:'pad',     label:'Drone',   color:'205,185,130', glow:'rgba(205,185,130,0.6)', decayMul:1.0 },
-  { id:'crystal', label:'Crystal', color:'190,145,215', glow:'rgba(190,145,215,0.6)', decayMul:1.4 },
-  { id:'shimmer', label:'Shimmer', color:'130,200,210', glow:'rgba(130,200,210,0.6)', decayMul:1.2 },
-  { id:'ether',   label:'Ether',   color:'160,215,170', glow:'rgba(160,215,170,0.6)', decayMul:0.8 },
-  { id:'pluck',   label:'Pluck',   color:'215,145,145', glow:'rgba(215,145,145,0.6)', decayMul:2.5 },
+  { id:'pad',     label:'Drone',   color:'205,185,130', glow:'rgba(205,185,130,0.6)', decayMul:1.0, snapMode:'chord' },
+  { id:'shimmer', label:'Shimmer', color:'130,200,210', glow:'rgba(130,200,210,0.6)', decayMul:1.2, snapMode:'chord' },
+  { id:'ether',   label:'Ether',   color:'160,215,170', glow:'rgba(160,215,170,0.6)', decayMul:0.8, snapMode:'chord' },
+  { id:'crystal', label:'Crystal', color:'190,145,215', glow:'rgba(190,145,215,0.6)', decayMul:1.4, snapMode:'mode'  },
+  { id:'pluck',   label:'Pluck',   color:'220,150,80',  glow:'rgba(220,150,80,0.6)',  decayMul:2.5, snapMode:'mode'  },
 ];
 const MAX_PER_TYPE=10;
 let selectedPalette=0; // index into PALETTE
@@ -647,11 +753,16 @@ function buildPalette(){
   el.innerHTML=PALETTE.map((p,i)=>`
     <button class="pal-btn${i===0?' selected':''}" id="pal-${i}"
       style="--pal-glow:${p.glow}"
-      onclick="selectPalette(${i})">
+      onclick="selectPalette(${i})"
+      title="${p.label} · ${p.snapMode==='chord'?'chord tones':'modal scale'}">
       <span class="pal-orb" style="
         background:radial-gradient(circle at 38% 35%,rgba(255,255,255,0.6),rgba(${p.color},0.95) 55%,rgba(${p.color},0.25));
         box-shadow:0 0 8px 2px rgba(${p.color},0.5)"></span>
-    </button>`).join('');
+    </button>`
+  ).reduce((acc,html,i)=>{
+    if(i===3) acc.push('<div style="width:1px;height:22px;background:rgba(220,205,175,0.12);margin:0 2px;flex-shrink:0"></div>');
+    acc.push(html); return acc;
+  },[]).join('');
 }
 
 function selectPalette(i){
@@ -690,8 +801,15 @@ function placeFromEvent(ex,ey){
 
   // Pitch: Y within pattern square (top=high, bottom=low)
   const yNorm=1-(ey-cy+S)/(S*2);
-  // In sequence mode, snap to the current chord's transposed scale
-  const snapFreqs = currentMode==='sequence' ? buildChordScaleFreqs(seqChordIdx) : scaleFreqs;
+  // Snap pool depends on palette type and mode:
+  // chord tones (root/3/5/7) for Drone/Shimmer/Ether; full modal scale for Crystal/Pluck
+  let snapFreqs;
+  if(currentMode==='sequence'){
+    const sm=PALETTE[selectedPalette].snapMode;
+    snapFreqs = sm==='chord' ? buildChordToneFreqs(seqChordIdx) : buildChordScaleFreqs(seqChordIdx);
+  } else {
+    snapFreqs = scaleFreqs;
+  }
   const scaleLen=snapFreqs.length;
   const scaleIdx=Math.round(yNorm*(scaleLen-1));
   const freq=snapFreqs[Math.max(0,Math.min(scaleLen-1,scaleIdx))];
