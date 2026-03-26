@@ -426,6 +426,20 @@ function snap(raw){
   for(const f of scaleFreqs){const d=Math.abs(f-raw);if(d<bd){bd=d;best=f;}}
   return best;
 }
+// Build a full scale transposed to the chord root for the given sequence step.
+// Used when placing tones during sequence mode so new notes are in the current chord.
+function buildChordScaleFreqs(stepIdx){
+  const{ivs}=SCALES[currentScaleName];
+  const seq=AMBIENT_SEQS[selectedSeqIdx];
+  const degreeIdx=seq.steps[stepIdx % seq.steps.length];
+  const scaleDeg=degreeIdx % ivs.length;
+  const chordRootIv=ivs[scaleDeg]; // semitones from key root to chord root
+  const freqs=[];
+  for(let oct=2;oct<=5;oct++)
+    for(const iv of ivs)
+      freqs.push(midiToFreq(rootMidi + chordRootIv + (oct+1)*12 + iv));
+  return freqs;
+}
 // Compute the target frequency for a tone given a chord step index.
 // Transposes the tone to the nearest occurrence of the target scale degree,
 // preserving the tone's relative octave position as closely as possible.
@@ -434,14 +448,24 @@ function freqForChordStep(tone, stepIdx){
   const seq=AMBIENT_SEQS[selectedSeqIdx];
   const degreeIdx = seq.steps[stepIdx % seq.steps.length];
   const scaleDeg = degreeIdx % ivs.length;
-  const targetIv = ivs[scaleDeg]; // semitone interval of target chord root
+  const chordRootIv = ivs[scaleDeg]; // semitone offset of chord root from key root
 
-  // Build list of all target-degree pitches across all octaves
+  // Find which scale degree the tone was placed on (relative to key root)
+  const baseMidi = Math.round(69 + 12*Math.log2(tone.baseFreq/440));
+  const baseSemi = ((baseMidi - rootMidi) % 12 + 12) % 12;
+  let closestDeg=0, closestDist=Infinity;
+  for(let d=0;d<ivs.length;d++){
+    const dist=Math.min(Math.abs(ivs[d]-baseSemi), 12-Math.abs(ivs[d]-baseSemi));
+    if(dist<closestDist){closestDist=dist;closestDeg=d;}
+  }
+  // Transpose: shift the tone by the same number of semitones as the chord root shifts
+  // This keeps the tone's relative position within the chord intact
+  const shiftSemis = chordRootIv; // how far chord root is from key root
+  const targetMidiBase = baseMidi + shiftSemis;
+
+  // Find the octave-adjusted candidate closest to the original pitch
   const candidates=[];
-  for(let oct=2;oct<=5;oct++)
-    candidates.push(midiToFreq(rootMidi+(oct+1)*12+targetIv));
-
-  // Pick the candidate closest in pitch to the tone's base frequency
+  for(let o=-2;o<=2;o++) candidates.push(midiToFreq(targetMidiBase + o*12));
   let best=candidates[0], bd=Infinity;
   for(const f of candidates){
     const d=Math.abs(f - tone.baseFreq);
@@ -540,9 +564,6 @@ function updateSequenceMode(){
     cur.innerHTML=chordRoot+'<span>'+seq.name+' · step '+(seqChordIdx+1)+' of '+seq.steps.length+'</span>';
     cur.classList.add('show');
   }
-  // Update the key select to show the sounding chord root
-  const keyEl=document.getElementById('keySelect');
-  if(keyEl) keyEl.value=chordRoot.replace(/[0-9]/g,''); // strip octave if any
   // keep tone list names in sync
   for(const t of placedTones){ t.name=freqToName(t.freq); }
   updateToneList();
@@ -635,9 +656,11 @@ function placeFromEvent(ex,ey){
 
   // Pitch: Y within pattern square (top=high, bottom=low)
   const yNorm=1-(ey-cy+S)/(S*2);
-  const scaleLen=scaleFreqs.length;
+  // In sequence mode, snap to the current chord's transposed scale
+  const snapFreqs = currentMode==='sequence' ? buildChordScaleFreqs(seqChordIdx) : scaleFreqs;
+  const scaleLen=snapFreqs.length;
   const scaleIdx=Math.round(yNorm*(scaleLen-1));
-  const freq=scaleFreqs[Math.max(0,Math.min(scaleLen-1,scaleIdx))];
+  const freq=snapFreqs[Math.max(0,Math.min(scaleLen-1,scaleIdx))];
 
   // loopOffset = exact moment within the loop when this note was placed
   // This is freeform recording — no grid, no quantization
