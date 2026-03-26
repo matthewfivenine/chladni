@@ -218,21 +218,55 @@ const au={rms:0,smoothRms:0,peakRms:0,phase:0,bands:[],ghostBands:[],padGlow:[],
 // FRAME MODE CACHE
 // ════════════════════════════════════════
 let frameModes=[], frameTotalW=0;
+
+// Smoothly interpolated dominant mode — the pattern tracks the loudest frequency
+// rather than averaging all tones, so it stays dynamic with many notes playing.
+let smoothM=1, smoothN=2; // current interpolated (m,n) — start at a simple mode
+const MODE_LERP_FAST=0.055; // how quickly pattern snaps to a new dominant tone
+const MODE_LERP_SLOW=0.018; // slower drift when no clear dominant (many equal tones)
+
 function buildFrameModes(allTones){
-  // Weight = band energy squared — louder note strongly dominates the blend
-  // This makes frequency shifts produce clear visible pattern changes
+  if(allTones.length===0){ frameModes=[]; frameTotalW=0; return; }
+
   frameModes=allTones.map((t,i)=>{
     const bi=i<placedTones.length?au.bands[i]:au.ghostBands[i-placedTones.length];
     const b=bi??0;
-    return{...freqToMode(t.freq), w:b*b}; // squared for contrast
+    return{...freqToMode(t.freq), w:b*b*b}; // cube for even sharper winner-takes-most
   });
   frameTotalW=frameModes.reduce((s,x)=>s+x.w,0);
+  if(frameTotalW<0.0001){ return; }
+
+  // Find the single loudest tone
+  let domIdx=0, domW=0;
+  for(let i=0;i<frameModes.length;i++){
+    if(frameModes[i].w>domW){domW=frameModes[i].w;domIdx=i;}
+  }
+  const dom=frameModes[domIdx];
+  const domShare=dom.w/frameTotalW; // 0..1 — how dominant the winner is
+
+  // Target: blend between dominant and a soft average of all — skewed by dominance
+  // When one tone is clearly loudest, pattern snaps to its mode cleanly.
+  // When many tones are equal energy, we drift slowly through a weighted center.
+  let tgtM=0, tgtN=0;
+  for(const{m,n,w}of frameModes){
+    const wn=w/frameTotalW;
+    tgtM+=m*wn; tgtN+=n*wn;
+  }
+  // Pull target further toward the dominant as it gets louder
+  const pull=Math.pow(domShare,0.5); // soft curve — 50% dominance = 70% pull
+  tgtM=tgtM+(dom.m-tgtM)*pull;
+  tgtN=tgtN+(dom.n-tgtN)*pull;
+
+  // Lerp speed: fast when there's a clear winner, slow when flat
+  const lerpRate=MODE_LERP_SLOW+(MODE_LERP_FAST-MODE_LERP_SLOW)*pull;
+  smoothM+=(tgtM-smoothM)*lerpRate;
+  smoothN+=(tgtN-smoothN)*lerpRate;
 }
+
 function evalField(xw,yw){
-  if(frameTotalW<0.001)return 0; // silent = no pattern
-  let v=0;
-  for(const{m,n,w}of frameModes)if(w>0.001)v+=chladni(xw,yw,m,n)*(w/frameTotalW);
-  return v;
+  if(frameTotalW<0.001)return 0;
+  // Primary field driven by the smooth interpolated dominant mode
+  return chladni(xw,yw,smoothM,smoothN);
 }
 
 
